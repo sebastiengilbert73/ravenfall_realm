@@ -5,6 +5,7 @@ const TRANSLATIONS = {
     en: {
         characterSheet: "Character Sheet",
         name: "Name",
+        gender: "Gender",
         race: "Race",
         class: "Class",
         dm: "Dungeon Master",
@@ -21,11 +22,18 @@ const TRANSLATIONS = {
         inputPlaceholder: "What do you do?",
         act: "Act",
         thinking: "The DM is thinking...",
-        statsLabels: { str: "STR", dex: "DEX", con: "CON", int: "INT", wis: "WIS", cha: "CHA" }
+        statsLabels: { str: "STR", dex: "DEX", con: "CON", int: "INT", wis: "WIS", cha: "CHA" },
+        genders: {
+            Male: "Male",
+            Female: "Female",
+            NonBinary: "Non-binary",
+            Other: "Other"
+        }
     },
     fr: {
         characterSheet: "Fiche de Personnage",
         name: "Nom",
+        gender: "Genre",
         race: "Race",
         class: "Classe",
         dm: "Maître du Donjon",
@@ -42,8 +50,65 @@ const TRANSLATIONS = {
         inputPlaceholder: "Que faites-vous ?",
         act: "Agir",
         thinking: "Le MD réfléchit...",
-        statsLabels: { str: "FOR", dex: "DEX", con: "CON", int: "INT", wis: "SAG", cha: "CHA" }
+        statsLabels: { str: "FOR", dex: "DEX", con: "CON", int: "INT", wis: "SAG", cha: "CHA" },
+        genders: {
+            Male: "Homme",
+            Female: "Femme",
+            NonBinary: "Non-binaire",
+            Other: "Autre"
+        }
     }
+};
+
+// Helper to process inline formatting (bold)
+const processInline = (text) => {
+    if (!text) return null;
+    // Split by **...**
+    const parts = text.split(/(\*\*.*?\*\*)/g);
+    return parts.map((part, index) => {
+        if (part.startsWith('**') && part.endsWith('**')) {
+            return <strong key={index}>{part.slice(2, -2)}</strong>;
+        }
+        return part;
+    });
+};
+
+// Main formatter
+const formatText = (text) => {
+    if (!text) return null;
+
+    // 1. Check for the specific list pattern " * **" which indicates a list item with a bold title
+    // or just " * " if it looks like a list.
+    // The user screenshot showed: " : * **Projectile..."
+
+    // We split by " * " but try to be smart about it.
+    // Let's rely on the pattern space-asterisk-space or space-asterisk-bold
+
+    if (text.includes(' * ') || text.includes('\n* ')) {
+        // Normalize newlines
+        let cleanText = text.replace(/\n\* /g, ' * ');
+
+        // Split by " * "
+        const rawSegments = cleanText.split(/\s\*\s/);
+
+        // If we found multiple segments, render as list
+        // Note: The first segment is the intro text
+        if (rawSegments.length > 1) {
+            return (
+                <div>
+                    {processInline(rawSegments[0])}
+                    <ul>
+                        {rawSegments.slice(1).map((seg, i) => (
+                            <li key={i}>{processInline(seg)}</li>
+                        ))}
+                    </ul>
+                </div>
+            );
+        }
+    }
+
+    // Fallback: just inline formatting
+    return processInline(text);
 };
 
 function GameSession() {
@@ -225,7 +290,8 @@ function GameSession() {
             );
         }
 
-        let content = msg.content;
+        // Use the new formatter
+        let content = formatText(msg.content);
 
         return (
             <div key={idx} className={`message ${msg.role}`}>
@@ -248,6 +314,11 @@ function GameSession() {
                 <h3>{text.characterSheet}</h3>
                 <div className="char-info">
                     <p><strong>{text.name}:</strong> {gameState.character.name}</p>
+                    <div className="ingame-model-selector">
+                        <p><strong>{text.gender}:</strong> {
+                            text.genders[gameState.character.gender] || gameState.character.gender
+                        }</p>
+                    </div>
                     <p><strong>{text.race}:</strong> {gameState.character.race}</p>
                     <p><strong>{text.class}:</strong> {gameState.character.class}</p>
 

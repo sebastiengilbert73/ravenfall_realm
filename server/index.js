@@ -153,7 +153,7 @@ app.post('/api/start', async (req, res) => {
 
         const basePrompt = lang === 'fr' ? SYSTEM_PROMPT_FR : SYSTEM_PROMPT_EN;
 
-        const initialPrompt = `${basePrompt} Name: ${character.name}, Race: ${character.race}, Class: ${character.class}. 
+        const initialPrompt = `${basePrompt} Name: ${character.name}, Gender: ${character.gender || 'Unknown'}, Race: ${character.race}, Class: ${character.class}. 
 Stats: STR: ${character.stats.str}, DEX: ${character.stats.dex}, CON: ${character.stats.con}, INT: ${character.stats.int}, WIS: ${character.stats.wis}, CHA: ${character.stats.cha}.
 
 ${lang === 'fr' ? "L'aventure commence. Décrivez la scène de départ." : "The adventure begins. Describe the starting scene."}`;

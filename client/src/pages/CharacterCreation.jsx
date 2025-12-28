@@ -5,10 +5,12 @@ const TRANSLATIONS = {
     en: {
         title: "Create Your Character",
         name: "Name",
+        gender: "Gender",
         race: "Race",
         class: "Class",
         rollStats: "Roll Stats",
         embark: "Embark",
+        embarking: "Embarking...",
         dm: "DM",
         races: {
             Human: "Human",
@@ -24,6 +26,12 @@ const TRANSLATIONS = {
             Cleric: "Cleric",
             Paladin: "Paladin"
         },
+        genders: {
+            Male: "Male",
+            Female: "Female",
+            NonBinary: "Non-binary",
+            Other: "Other"
+        },
         stats: {
             str: "STR",
             dex: "DEX",
@@ -36,10 +44,12 @@ const TRANSLATIONS = {
     fr: {
         title: "Créez Votre Personnage",
         name: "Nom",
+        gender: "Genre",
         race: "Race",
         class: "Classe",
         rollStats: "Lancer les Dés",
         embark: "Commencer l'Aventure",
+        embarking: "Lancement...",
         dm: "MD",
         races: {
             Human: "Humain",
@@ -54,6 +64,12 @@ const TRANSLATIONS = {
             Rogue: "Voleur",
             Cleric: "Clerc",
             Paladin: "Paladin"
+        },
+        genders: {
+            Male: "Homme",
+            Female: "Femme",
+            NonBinary: "Non-binaire",
+            Other: "Autre"
         },
         stats: {
             str: "FOR",
@@ -74,8 +90,10 @@ function CharacterCreation() {
 
     const text = TRANSLATIONS[language] || TRANSLATIONS.en;
 
+    const [isEmbarking, setIsEmbarking] = useState(false);
     const [formData, setFormData] = useState({
         name: '',
+        gender: 'Male',
         race: 'Human',
         class: 'Fighter',
         stats: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 }
@@ -97,6 +115,9 @@ function CharacterCreation() {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        if (isEmbarking) return;
+
+        setIsEmbarking(true);
         try {
             const response = await fetch('http://localhost:3000/api/start', {
                 method: 'POST',
@@ -110,9 +131,12 @@ function CharacterCreation() {
             const data = await response.json();
             if (data.sessionId) {
                 navigate(`/play/${data.sessionId}`);
+            } else {
+                setIsEmbarking(false);
             }
         } catch (error) {
             console.error("Failed to start game", error);
+            setIsEmbarking(false);
         }
     };
 
@@ -124,12 +148,23 @@ function CharacterCreation() {
             <form onSubmit={handleSubmit}>
                 <div className="form-group">
                     <label>{text.name}</label>
-                    <input name="name" value={formData.name} onChange={handleChange} required />
+                    <input name="name" value={formData.name} onChange={handleChange} required disabled={isEmbarking} />
+                </div>
+
+                <div className="form-group">
+                    <label>{text.gender}</label>
+                    <select name="gender" value={formData.gender} onChange={handleChange} disabled={isEmbarking}>
+                        {Object.keys(TRANSLATIONS.en.genders).map(genderKey => (
+                            <option key={genderKey} value={genderKey}>
+                                {text.genders[genderKey]}
+                            </option>
+                        ))}
+                    </select>
                 </div>
 
                 <div className="form-group">
                     <label>{text.race}</label>
-                    <select name="race" value={formData.race} onChange={handleChange}>
+                    <select name="race" value={formData.race} onChange={handleChange} disabled={isEmbarking}>
                         {Object.keys(TRANSLATIONS.en.races).map(raceKey => (
                             <option key={raceKey} value={raceKey}>
                                 {text.races[raceKey]}
@@ -140,7 +175,7 @@ function CharacterCreation() {
 
                 <div className="form-group">
                     <label>{text.class}</label>
-                    <select name="class" value={formData.class} onChange={handleChange}>
+                    <select name="class" value={formData.class} onChange={handleChange} disabled={isEmbarking}>
                         {Object.keys(TRANSLATIONS.en.classes).map(classKey => (
                             <option key={classKey} value={classKey}>
                                 {text.classes[classKey]}
@@ -150,7 +185,7 @@ function CharacterCreation() {
                 </div>
 
                 <div className="stats-section">
-                    <button type="button" onClick={generateStats} className="btn-secondary">{text.rollStats}</button>
+                    <button type="button" onClick={generateStats} className="btn-secondary" disabled={isEmbarking}>{text.rollStats}</button>
                     <div className="stats-grid">
                         {Object.entries(formData.stats).map(([key, val]) => (
                             <div key={key} className="stat-item">
@@ -161,7 +196,19 @@ function CharacterCreation() {
                     </div>
                 </div>
 
-                <button type="submit" className="btn-primary">{text.embark}</button>
+                <button
+                    type="submit"
+                    className={`btn-primary ${isEmbarking ? 'loading-btn' : ''}`}
+                    disabled={isEmbarking}
+                >
+                    {isEmbarking ? (
+                        <span className="spinner-text">
+                            <span className="spinner"></span> {text.embarking}
+                        </span>
+                    ) : (
+                        text.embark
+                    )}
+                </button>
             </form>
         </div>
     );
