@@ -18,10 +18,10 @@ app.use(cors());
 app.use(bodyParser.json());
 
 // In-memory storage for game sessions
-// Key: sessionId, Value: { character: {}, history: [], model: string }
+// Key: sessionId, Value: { character: {}, history: [], model: string, language: string }
 const sessions = {};
 
-const SYSTEM_PROMPT = `You are the Dungeon Master (DM) for a Dungeons and Dragons game. 
+const SYSTEM_PROMPT_EN = `You are the Dungeon Master (DM) for a Dungeons and Dragons game. 
 You will describe the world, non-player characters (NPCs), and events. 
 The player will tell you their actions.
 
@@ -42,9 +42,30 @@ To perform a roll, you MUST output a special command in your response: \`[[ROLL:
 Current Player Character:
 `;
 
+const SYSTEM_PROMPT_FR = `Vous êtes le Maître du Donjon (MD) pour une partie de Donjons et Dragons.
+Vous décrirez le monde, les personnages non-joueurs (PNJ) et les événements en FRANÇAIS.
+Le joueur vous dira ses actions.
+
+**IMPORTANT : LANCER DE DÉS**
+Vous NE devez PAS demander au joueur de lancer les dés. Vous devez déterminer quand un jet est nécessaire (combat, tests de compétence, jets de sauvegarde).
+Pour effectuer un jet, vous DEVEZ inclure une commande spéciale dans votre réponse : \`[[ROLL: XdY+Z]]\`
+- Exemple : \`[[ROLL: 1d20+3]]\` ou \`[[ROLL: 2d6]]\`
+- Arrêtez votre réponse immédiatement après la commande.
+- Le système lancera les dés et vous fournira le résultat lors de la prochaine instruction.
+- Utilisez le résultat fourni pour narrer la suite.
+
+**Règles Générales :**
+1. Décrivez les conséquences des actions du joueur selon les règles de la 5e édition.
+2. Gardez les descriptions vivantes mais concises.
+3. Ne jouez pas à la place du joueur.
+4. Si un combat survient, gérez l'initiative et les tours en utilisant les commandes ROLL.
+5. RÉPONDEZ TOUJOURS EN FRANÇAIS.
+
+Personnage du Joueur Actuel :
+`;
+
 // Helper: Parse dice string (e.g. "1d20+5")
 function parseDice(expression) {
-    // Regex for XdY(+/-Z) matches
     const regex = /(\d+)d(\d+)(?:\s*([-+])\s*(\d+))?/i;
     const match = expression.match(regex);
     if (!match) return null;
@@ -73,6 +94,52 @@ function rollDice(diceObj) {
     return { total, rolls, expression: `${diceObj.count}d${diceObj.sides}${diceObj.op ? diceObj.op + diceObj.mod : ''}` };
 }
 
+// Logic to process one turn of generation
+async function processTurn(session) {
+    console.log(`Generating response for session ${session.id}...`);
+
+    // Generate response
+    const responseText = await generateResponse(session.history, session.model);
+
+    // Check for ROLL command
+    const rollMatch = responseText.match(/\[\[ROLL:\s*(.*?)\]\]/);
+
+    if (rollMatch) {
+        const expression = rollMatch[1];
+        console.log(`DM requested roll: ${expression}`);
+
+        const diceData = parseDice(expression);
+        if (diceData) {
+            const result = rollDice(diceData);
+
+            // Localize System Message
+            let systemMsg;
+            if (session.language === 'fr') {
+                systemMsg = `Système : Jet de ${result.expression}. Résultat : ${result.total} (Dés : ${result.rolls.join(', ')})`;
+            } else {
+                systemMsg = `System: Rolled ${result.expression}. Result: ${result.total} (Dice: ${result.rolls.join(', ')})`;
+            }
+
+            console.log(systemMsg);
+
+            session.history.push({ role: 'assistant', content: responseText });
+            session.history.push({ role: 'system', content: systemMsg });
+
+            // Return status continue, meaning client should call again
+            return { status: 'continue', message: responseText };
+        } else {
+            console.error("Failed to parse dice expression");
+            session.history.push({ role: 'assistant', content: responseText });
+            return { status: 'complete', message: responseText };
+        }
+    } else {
+        // No roll, this is the final narrative
+        session.history.push({ role: 'assistant', content: responseText });
+        return { status: 'complete', message: responseText };
+    }
+}
+
+
 app.get('/api/models', async (req, res) => {
     const models = await listModels();
     res.json({ models });
@@ -80,23 +147,24 @@ app.get('/api/models', async (req, res) => {
 
 app.post('/api/start', async (req, res) => {
     try {
-        const { character, model } = req.body;
+        const { character, model, language } = req.body;
         const sessionId = Date.now().toString();
+        const lang = language || 'en';
 
-        const initialPrompt = `${SYSTEM_PROMPT} Name: ${character.name}, Race: ${character.race}, Class: ${character.class}. 
+        const basePrompt = lang === 'fr' ? SYSTEM_PROMPT_FR : SYSTEM_PROMPT_EN;
+
+        const initialPrompt = `${basePrompt} Name: ${character.name}, Race: ${character.race}, Class: ${character.class}. 
 Stats: STR: ${character.stats.str}, DEX: ${character.stats.dex}, CON: ${character.stats.con}, INT: ${character.stats.int}, WIS: ${character.stats.wis}, CHA: ${character.stats.cha}.
 
-The adventure begins. Describe the starting scene.`;
+${lang === 'fr' ? "L'aventure commence. Décrivez la scène de départ." : "The adventure begins. Describe the starting scene."}`;
 
-        // Use selected model, initial generation usually doesn't need rolls but we can support it if needed.
-        // For simplicity, we assume start doesn't trigger a roll loop immediately, or we could refactor the loop logic to be reusable.
-        // Let's assume start implies just description.
         const response = await generateResponse([{ role: 'system', content: initialPrompt }], model);
 
         sessions[sessionId] = {
             id: sessionId,
             character,
             model,
+            language: lang,
             history: [
                 { role: 'system', content: initialPrompt },
                 { role: 'assistant', content: response }
@@ -123,65 +191,32 @@ app.post('/api/action', async (req, res) => {
         // Add player action to history
         session.history.push({ role: 'user', content: action });
 
-        let finalResponse = "";
-        let steps = 0;
-        const MAX_STEPS = 5; // Prevent infinite loops
+        // Process single turn
+        const result = await processTurn(session);
+        res.json(result);
 
-        while (steps < MAX_STEPS) {
-            steps++;
-            console.log(`Step ${steps}: Generating response...`);
-
-            // Generate response
-            const responseText = await generateResponse(session.history, session.model);
-
-            // Check for ROLL command
-            const rollMatch = responseText.match(/\[\[ROLL:\s*(.*?)\]\]/);
-
-            if (rollMatch) {
-                const expression = rollMatch[1];
-                console.log(`DM requested roll: ${expression}`);
-
-                const diceData = parseDice(expression);
-                if (diceData) {
-                    const result = rollDice(diceData);
-                    const systemMsg = `System: Rolled ${result.expression}. Result: ${result.total} (Dice: ${result.rolls.join(', ')})`;
-
-                    console.log(systemMsg);
-
-                    // Add the partial response (text before roll) if any?
-                    // Usually LLM will output "I need to check... [[ROLL: ...]]"
-                    // We can retain the preamble or just treat the whole block as the request.
-                    // Ideally we append the response containing the roll request to history,
-                    // but marked as assistant.
-
-                    // Note: If we just append responseText, the user will see "[[ROLL...]]" in chat.
-                    // Ideally we want to hide that from the user or format it.
-                    // For now, let's append it. Frontend can handle it if we want.
-
-                    session.history.push({ role: 'assistant', content: responseText });
-                    session.history.push({ role: 'system', content: systemMsg }); // Result for LLM
-
-                    // Loop continues, LLM sees its request and the system result
-                    continue;
-                } else {
-                    console.error("Failed to parse dice expression");
-                    // If parse fails, just return text to avoid loop
-                    finalResponse = responseText;
-                    session.history.push({ role: 'assistant', content: responseText });
-                    break;
-                }
-            } else {
-                // No roll, this is the final narrative
-                finalResponse = responseText;
-                session.history.push({ role: 'assistant', content: responseText });
-                break;
-            }
-        }
-
-        res.json({ message: finalResponse });
     } catch (error) {
         console.error('Error processing action:', error);
         res.status(500).json({ error: 'Failed to process action' });
+    }
+});
+
+app.post('/api/continue', async (req, res) => {
+    try {
+        const { sessionId } = req.body;
+        const session = sessions[sessionId];
+
+        if (!session) {
+            return res.status(404).json({ error: 'Session not found' });
+        }
+
+        // Just continue processing based on current history (which should have a system message at end)
+        const result = await processTurn(session);
+        res.json(result);
+
+    } catch (error) {
+        console.error('Error continuing action:', error);
+        res.status(500).json({ error: 'Failed to continue action' });
     }
 });
 

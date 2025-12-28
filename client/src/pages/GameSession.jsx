@@ -1,6 +1,51 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 
+const TRANSLATIONS = {
+    en: {
+        characterSheet: "Character Sheet",
+        name: "Name",
+        race: "Race",
+        class: "Class",
+        dm: "Dungeon Master",
+        stats: "Stats",
+        saveGame: "Save Game",
+        saving: "Saving...",
+        exit: "Exit",
+        saveAndExit: "Save & Exit",
+        exitNoSave: "Exit without Saving",
+        cancel: "Cancel",
+        unsavedChanges: "Unsaved Changes",
+        unsavedMessage: "You have unsaved progress. Do you want to save before exiting?",
+        gameSaved: "Game Saved!",
+        inputPlaceholder: "What do you do?",
+        act: "Act",
+        thinking: "The DM is thinking...",
+        statsLabels: { str: "STR", dex: "DEX", con: "CON", int: "INT", wis: "WIS", cha: "CHA" }
+    },
+    fr: {
+        characterSheet: "Fiche de Personnage",
+        name: "Nom",
+        race: "Race",
+        class: "Classe",
+        dm: "Maître du Donjon",
+        stats: "Statistiques",
+        saveGame: "Sauvegarder",
+        saving: "Sauvegarde...",
+        exit: "Quitter",
+        saveAndExit: "Sauvegarder & Quitter",
+        exitNoSave: "Quitter sans Sauvegarder",
+        cancel: "Annuler",
+        unsavedChanges: "Modifications non sauvegardées",
+        unsavedMessage: "Vous avez des progrès non sauvegardés. Voulez-vous sauvegarder avant de quitter ?",
+        gameSaved: "Partie Sauvegardée !",
+        inputPlaceholder: "Que faites-vous ?",
+        act: "Agir",
+        thinking: "Le MD réfléchit...",
+        statsLabels: { str: "FOR", dex: "DEX", con: "CON", int: "INT", wis: "SAG", cha: "CHA" }
+    }
+};
+
 function GameSession() {
     const { sessionId } = useParams();
     const navigate = useNavigate();
@@ -25,7 +70,11 @@ function GameSession() {
             .catch(err => console.error(err));
 
         // Fetch Game State
-        fetch(`http://localhost:3000/api/state/${sessionId}`)
+        fetchState();
+    }, [sessionId, navigate]);
+
+    const fetchState = () => {
+        return fetch(`http://localhost:3000/api/state/${sessionId}`)
             .then(res => {
                 if (!res.ok) throw new Error("Session not found");
                 return res.json();
@@ -35,7 +84,7 @@ function GameSession() {
                 console.error(err);
                 navigate('/');
             });
-    }, [sessionId, navigate]);
+    };
 
     useEffect(() => {
         chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -48,7 +97,7 @@ function GameSession() {
         const action = input;
         setInput('');
         setProcessing(true);
-        setHasUnsavedChanges(true); // Mark as dirty
+        setHasUnsavedChanges(true);
 
         // Optimistic update
         setGameState(prev => ({
@@ -56,6 +105,11 @@ function GameSession() {
             history: [...prev.history, { role: 'user', content: action }]
         }));
 
+        processAction(action);
+    };
+
+    // Recursive function to handle turn steps
+    const processAction = async (action) => {
         try {
             const res = await fetch('http://localhost:3000/api/action', {
                 method: 'POST',
@@ -64,19 +118,40 @@ function GameSession() {
             });
             const data = await res.json();
 
-            // Since the backend might have added multiple messages (rolls + narrative), 
-            // we should re-fetch the full state to sync perfectly, OR we trust the backend
-            // return. The current backend returns just the final { message: "..." }.
-            // BUT, the history on server has changed more than that.
-            // To see the rolls, we MUST fetch the full updated history.
+            // Refresh state to show result
+            await fetchState();
 
-            const stateRes = await fetch(`http://localhost:3000/api/state/${sessionId}`);
-            const updatedState = await stateRes.json();
-            setGameState(updatedState);
-
+            if (data.status === 'continue') {
+                // Determine loop delay (optional UX pause)
+                setTimeout(() => processContinue(), 500);
+            } else {
+                setProcessing(false);
+            }
         } catch (error) {
             console.error("Action failed", error);
-        } finally {
+            setProcessing(false);
+        }
+    };
+
+    const processContinue = async () => {
+        try {
+            const res = await fetch('http://localhost:3000/api/continue', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ sessionId })
+            });
+            const data = await res.json();
+
+            // Refresh state
+            await fetchState();
+
+            if (data.status === 'continue') {
+                setTimeout(() => processContinue(), 500);
+            } else {
+                setProcessing(false);
+            }
+        } catch (error) {
+            console.error("Continue failed", error);
             setProcessing(false);
         }
     };
@@ -130,7 +205,7 @@ function GameSession() {
             });
             if (res.ok) {
                 setGameState(prev => ({ ...prev, model: newModel }));
-                setHasUnsavedChanges(true); // Changing model counts as a change worth saving
+                setHasUnsavedChanges(true);
             }
         } catch (err) {
             console.error("Failed to switch model", err);
@@ -138,8 +213,6 @@ function GameSession() {
     };
 
     const renderMessage = (msg, idx) => {
-        // Filter out original system prompt, but keep system messages generated during play (like rolls)
-        // The original system prompt is usually the very first message.
         if (idx === 0 && msg.role === 'system') return null;
 
         if (msg.role === 'system') {
@@ -152,7 +225,6 @@ function GameSession() {
             );
         }
 
-        // Format assistant messages to potentially highlight the Roll Command
         let content = msg.content;
 
         return (
@@ -167,17 +239,20 @@ function GameSession() {
 
     if (!gameState) return <div className="loading">Summoning the world...</div>;
 
+    const lang = gameState.language || 'en';
+    const text = TRANSLATIONS[lang] || TRANSLATIONS.en;
+
     return (
         <div className="game-container">
             <aside className="sidebar">
-                <h3>Character Sheet</h3>
+                <h3>{text.characterSheet}</h3>
                 <div className="char-info">
-                    <p><strong>Name:</strong> {gameState.character.name}</p>
-                    <p><strong>Race:</strong> {gameState.character.race}</p>
-                    <p><strong>Class:</strong> {gameState.character.class}</p>
+                    <p><strong>{text.name}:</strong> {gameState.character.name}</p>
+                    <p><strong>{text.race}:</strong> {gameState.character.race}</p>
+                    <p><strong>{text.class}:</strong> {gameState.character.class}</p>
 
                     <div className="ingame-model-selector">
-                        <label>Dungeon Master:</label>
+                        <label>{text.dm}:</label>
                         {models.length > 0 ? (
                             <select
                                 value={gameState.model || ''}
@@ -191,26 +266,26 @@ function GameSession() {
                     </div>
                 </div>
                 <div className="stats-list">
-                    <h4>Stats</h4>
+                    <h4>{text.stats}</h4>
                     <ul>
                         {Object.entries(gameState.character.stats).map(([key, val]) => (
-                            <li key={key}><strong>{key.toUpperCase()}:</strong> {val}</li>
+                            <li key={key}><strong>{text.statsLabels[key] || key.toUpperCase()}:</strong> {val}</li>
                         ))}
                     </ul>
                 </div>
                 <div className="sidebar-actions">
-                    <button onClick={() => handleSave().then(success => success && alert('Game Saved!'))} disabled={saving} className="btn-secondary">
-                        {saving ? 'Saving...' : 'Save Game'}
+                    <button onClick={() => handleSave().then(success => success && alert(text.gameSaved))} disabled={saving} className="btn-secondary">
+                        {saving ? text.saving : text.saveGame}
                     </button>
                     <button onClick={handleExitRequest} className="btn-secondary">
-                        Exit
+                        {text.exit}
                     </button>
                 </div>
             </aside>
             <main className="chat-interface">
                 <div className="chat-log">
                     {gameState.history.map((msg, idx) => renderMessage(msg, idx))}
-                    {processing && <div className="message assistant"><div className="bubble"><em>The DM is thinking...</em></div></div>}
+                    {processing && <div className="message assistant"><div className="bubble"><em>{text.thinking}</em></div></div>}
                     <div ref={chatEndRef} />
                 </div>
                 <form className="action-bar" onSubmit={handleSend}>
@@ -218,10 +293,10 @@ function GameSession() {
                         type="text"
                         value={input}
                         onChange={e => setInput(e.target.value)}
-                        placeholder="What do you do?"
+                        placeholder={text.inputPlaceholder}
                         disabled={processing}
                     />
-                    <button type="submit" disabled={processing || !input.trim()}>Act</button>
+                    <button type="submit" disabled={processing || !input.trim()}>{text.act}</button>
                 </form>
             </main>
 
@@ -229,27 +304,27 @@ function GameSession() {
             {showExitModal && (
                 <div className="modal-overlay">
                     <div className="modal-content">
-                        <h3>Unsaved Changes</h3>
-                        <p>You have unsaved progress. Do you want to save before exiting?</p>
+                        <h3>{text.unsavedChanges}</h3>
+                        <p>{text.unsavedMessage}</p>
                         <div className="modal-actions">
                             <button
                                 onClick={handleSaveAndExit}
                                 className="btn-primary"
                                 disabled={saving}
                             >
-                                {saving ? 'Saving...' : 'Save & Exit'}
+                                {saving ? text.saving : text.saveAndExit}
                             </button>
                             <button
                                 onClick={() => navigate('/')}
                                 className="btn-danger"
                             >
-                                Exit without Saving
+                                {text.exitNoSave}
                             </button>
                             <button
                                 onClick={() => setShowExitModal(false)}
                                 className="btn-text"
                             >
-                                Cancel
+                                {text.cancel}
                             </button>
                         </div>
                     </div>

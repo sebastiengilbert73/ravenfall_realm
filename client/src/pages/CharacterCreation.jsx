@@ -1,120 +1,167 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 
-const RACES = ['Human', 'Elf', 'Dwarf', 'Halfling', 'Orc', 'Tiefling'];
-const CLASSES = ['Fighter', 'Wizard', 'Rogue', 'Cleric', 'Ranger', 'Paladin'];
+const TRANSLATIONS = {
+    en: {
+        title: "Create Your Character",
+        name: "Name",
+        race: "Race",
+        class: "Class",
+        rollStats: "Roll Stats",
+        embark: "Embark",
+        dm: "DM",
+        races: {
+            Human: "Human",
+            Elf: "Elf",
+            Dwarf: "Dwarf",
+            Halfling: "Halfling",
+            Orc: "Orc"
+        },
+        classes: {
+            Fighter: "Fighter",
+            Wizard: "Wizard",
+            Rogue: "Rogue",
+            Cleric: "Cleric",
+            Paladin: "Paladin"
+        },
+        stats: {
+            str: "STR",
+            dex: "DEX",
+            con: "CON",
+            int: "INT",
+            wis: "WIS",
+            cha: "CHA"
+        }
+    },
+    fr: {
+        title: "Créez Votre Personnage",
+        name: "Nom",
+        race: "Race",
+        class: "Classe",
+        rollStats: "Lancer les Dés",
+        embark: "Commencer l'Aventure",
+        dm: "MD",
+        races: {
+            Human: "Humain",
+            Elf: "Elfe",
+            Dwarf: "Nain",
+            Halfling: "Halfelin",
+            Orc: "Orque"
+        },
+        classes: {
+            Fighter: "Guerrier",
+            Wizard: "Magicien",
+            Rogue: "Voleur",
+            Cleric: "Clerc",
+            Paladin: "Paladin"
+        },
+        stats: {
+            str: "FOR",
+            dex: "DEX",
+            con: "CON",
+            int: "INT",
+            wis: "SAG",
+            cha: "CHA"
+        }
+    }
+};
 
 function CharacterCreation() {
     const navigate = useNavigate();
     const location = useLocation();
-    const selectedModel = location.state?.model; // Might be undefined if user navigated directly
+    const selectedModel = location.state?.model;
+    const language = location.state?.language || 'en'; // Default to en if missing
+
+    const text = TRANSLATIONS[language] || TRANSLATIONS.en;
 
     const [formData, setFormData] = useState({
         name: '',
-        race: RACES[0],
-        class: CLASSES[0],
-        stats: {
-            str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10
-        }
+        race: 'Human',
+        class: 'Fighter',
+        stats: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 }
     });
 
-    const [loading, setLoading] = useState(false);
-
-    // If no model was selected (direct navigation), warn or assume default
-    // Ideally, we redirect back to landing, but let's just proceed with server default
-
-    const handleStatChange = (stat, value) => {
-        setFormData(prev => ({
-            ...prev,
-            stats: { ...prev.stats, [stat]: parseInt(value) || 0 }
-        }));
+    const handleChange = (e) => {
+        setFormData({ ...formData, [e.target.name]: e.target.value });
     };
 
-    const rollStats = () => {
+    const generateStats = () => {
         const roll = () => Math.floor(Math.random() * 6) + Math.floor(Math.random() * 6) + Math.floor(Math.random() * 6) + 3;
-        setFormData(prev => ({
-            ...prev,
+        setFormData({
+            ...formData,
             stats: {
                 str: roll(), dex: roll(), con: roll(), int: roll(), wis: roll(), cha: roll()
             }
-        }));
+        });
     };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-        setLoading(true);
         try {
             const response = await fetch('http://localhost:3000/api/start', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     character: formData,
-                    model: selectedModel // Send undefined if not set, server handles fallback
+                    model: selectedModel,
+                    language: language // Pass language preference
                 })
             });
-
             const data = await response.json();
             if (data.sessionId) {
                 navigate(`/play/${data.sessionId}`);
             }
         } catch (error) {
             console.error("Failed to start game", error);
-            alert("Failed to connect to server.");
-        } finally {
-            setLoading(false);
         }
     };
 
     return (
         <div className="creation-container">
-            <h2>Create Your Character</h2>
-            {selectedModel && <div className="model-badge">DM: {selectedModel}</div>}
+            <h2>{text.title}</h2>
+            {selectedModel && <div className="model-badge">{text.dm}: {selectedModel} ({language.toUpperCase()})</div>}
 
             <form onSubmit={handleSubmit}>
                 <div className="form-group">
-                    <label>Name:</label>
-                    <input
-                        type="text"
-                        value={formData.name}
-                        onChange={e => setFormData({ ...formData, name: e.target.value })}
-                        required
-                    />
+                    <label>{text.name}</label>
+                    <input name="name" value={formData.name} onChange={handleChange} required />
                 </div>
 
                 <div className="form-group">
-                    <label>Race:</label>
-                    <select value={formData.race} onChange={e => setFormData({ ...formData, race: e.target.value })}>
-                        {RACES.map(r => <option key={r} value={r}>{r}</option>)}
+                    <label>{text.race}</label>
+                    <select name="race" value={formData.race} onChange={handleChange}>
+                        {Object.keys(TRANSLATIONS.en.races).map(raceKey => (
+                            <option key={raceKey} value={raceKey}>
+                                {text.races[raceKey]}
+                            </option>
+                        ))}
                     </select>
                 </div>
 
                 <div className="form-group">
-                    <label>Class:</label>
-                    <select value={formData.class} onChange={e => setFormData({ ...formData, class: e.target.value })}>
-                        {CLASSES.map(c => <option key={c} value={c}>{c}</option>)}
+                    <label>{text.class}</label>
+                    <select name="class" value={formData.class} onChange={handleChange}>
+                        {Object.keys(TRANSLATIONS.en.classes).map(classKey => (
+                            <option key={classKey} value={classKey}>
+                                {text.classes[classKey]}
+                            </option>
+                        ))}
                     </select>
                 </div>
 
-                <div className="stats-group">
-                    <h3>Stats</h3>
-                    <button type="button" onClick={rollStats}>Randomize Stats</button>
+                <div className="stats-section">
+                    <button type="button" onClick={generateStats} className="btn-secondary">{text.rollStats}</button>
                     <div className="stats-grid">
-                        {Object.keys(formData.stats).map(stat => (
-                            <div key={stat} className="stat-item">
-                                <label>{stat.toUpperCase()}:</label>
-                                <input
-                                    type="number"
-                                    value={formData.stats[stat]}
-                                    onChange={e => handleStatChange(stat, e.target.value)}
-                                />
+                        {Object.entries(formData.stats).map(([key, val]) => (
+                            <div key={key} className="stat-item">
+                                <label>{text.stats[key] || key.toUpperCase()}</label>
+                                <span>{val}</span>
                             </div>
                         ))}
                     </div>
                 </div>
 
-                <button type="submit" disabled={loading} className="btn-primary">
-                    {loading ? 'Embarking...' : 'Begin Adventure'}
-                </button>
+                <button type="submit" className="btn-primary">{text.embark}</button>
             </form>
         </div>
     );

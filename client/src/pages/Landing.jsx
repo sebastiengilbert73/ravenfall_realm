@@ -5,6 +5,7 @@ function Landing() {
     const navigate = useNavigate();
     const [models, setModels] = useState([]);
     const [selectedModel, setSelectedModel] = useState('');
+    const [language, setLanguage] = useState('en'); // 'en' or 'fr'
     const [loading, setLoading] = useState(true);
 
     // Save/Load state
@@ -40,7 +41,7 @@ function Landing() {
     };
 
     const handleStart = () => {
-        navigate('/create', { state: { model: selectedModel } });
+        navigate('/create', { state: { model: selectedModel, language } });
     };
 
     const handleLoad = async (filename) => {
@@ -68,15 +69,39 @@ function Landing() {
             {loading ? (
                 <p>Loading arcane knowledge (models)...</p>
             ) : models.length > 0 ? (
-                <div className="model-selector">
-                    <label htmlFor="model-select">Select Dungeon Master:</label>
-                    <select
-                        id="model-select"
-                        value={selectedModel}
-                        onChange={(e) => setSelectedModel(e.target.value)}
-                    >
-                        {models.map(m => <option key={m} value={m}>{m}</option>)}
-                    </select>
+                <div className="config-panel">
+                    <div className="model-selector">
+                        <label htmlFor="model-select">Dungeon Master:</label>
+                        <select
+                            id="model-select"
+                            value={selectedModel}
+                            onChange={(e) => setSelectedModel(e.target.value)}
+                        >
+                            {models.map(m => <option key={m} value={m}>{m}</option>)}
+                        </select>
+                    </div>
+
+                    <div className="language-selector">
+                        <label>Language:</label>
+                        <div className="radio-group">
+                            <label>
+                                <input
+                                    type="radio"
+                                    value="en"
+                                    checked={language === 'en'}
+                                    onChange={(e) => setLanguage(e.target.value)}
+                                /> 🇬🇧 English
+                            </label>
+                            <label>
+                                <input
+                                    type="radio"
+                                    value="fr"
+                                    checked={language === 'fr'}
+                                    onChange={(e) => setLanguage(e.target.value)}
+                                /> 🇫🇷 Français
+                            </label>
+                        </div>
+                    </div>
                 </div>
             ) : (
                 <p className="error">No LLM models found. Please check Ollama.</p>

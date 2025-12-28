@@ -387,3 +387,37 @@ select {
 .system-bubble .icon {
   font-style: normal;
 }
+
+/* Config Panel (Landing) */
+.config-panel {
+  background: var(--panel-bg);
+  padding: 1.5rem;
+  border-radius: 8px;
+  border: 1px solid #444;
+  margin-bottom: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.language-selector label {
+  display: block;
+  margin-bottom: 0.5rem;
+}
+
+.radio-group {
+  display: flex;
+  gap: 1.5rem;
+  justify-content: center;
+}
+
+.radio-group label {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.radio-group input[type="radio"] {
+  accent-color: var(--accent-color);
+}
