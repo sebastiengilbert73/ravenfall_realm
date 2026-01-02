@@ -126,8 +126,11 @@ const processInline = (text) => {
 const formatText = (text) => {
     if (!text) return null;
 
-    // Remove all technical commands [[...]] from display
+    // Remove all technical commands [[...]] and leaked tokens from display
     text = text.replace(/\[\[[\s\S]*?\]\]/g, '');
+    text = text.replace(/<[\s\S]*?>/g, ''); // Remove any lingering <token> tags
+    text = text.replace(/(?:User:|Player:|Human:|Système\s*:|System\s*:)/gi, '');
+    text = text.trim();
 
     if (text.includes(' * ') || text.includes('\n* ')) {
         let cleanText = text.replace('\n* ', ' * ');

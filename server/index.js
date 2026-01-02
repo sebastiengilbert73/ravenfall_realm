@@ -176,8 +176,8 @@ async function processTurn(session) {
         context.push({ role: 'system', content: combatStartReminder });
     } else if (isOngoingCombat) {
         const ongoingCombatReminder = session.language === 'fr'
-            ? "[RAPPEL DE COMBAT: Le combat est en cours. Vous DEVEZ jouer les tours de TOUS les PNJs, alliés (compagnons) et ennemis dans l'ordre d'initiative. Décrivez leur action et sortez un [[ROLL]] maintenant. NE DEMANDEZ PAS au joueur ce qu'ils font.]"
-            : "[COMBAT REMINDER: Combat is ongoing. You MUST play the turns of ALL NPCs, allies (companions), and enemies in initiative order. Describe their action and output a [[ROLL]] command NOW. DO NOT ask the player what they do.]";
+            ? "[RAPPEL DE COMBAT: Le combat est en cours. Vous DEVEZ jouer les tours de TOUS les PNJs, alliés (compagnons) et ennemis dans l'ordre d'initiative. Décrivez leur action et sortez un [[ROLL]] maintenant. NE DEMANDEZ PAS au joueur ce qu'ils font (Ex: Ne dites PAS 'Que fait Kaelen ?'). DECIDEZ POUR EUX.]"
+            : "[COMBAT REMINDER: Combat is ongoing. You MUST play the turns of ALL NPCs, allies (companions), and enemies in initiative order. Describe their action and output a [[ROLL]] command NOW. DO NOT ask the player what they do (Ex: Do NOT say 'What does Kaelen do?'). DECIDE FOR THEM.]";
         context.push({ role: 'system', content: ongoingCombatReminder });
     }
 
@@ -227,6 +227,32 @@ async function processTurn(session) {
         // Roll command usually precedes this, but if not, we still want to truncate before the hallucinated result
         cleanText = cleanText.substring(0, systemStopMatch.index).trim();
         console.log("Truncated response at hallucinated System label.");
+    }
+
+    // --- SELF-CORRECTION: Forbid asking for player input during NPC/Companion turns ---
+    const questionKeywords = session.language === 'fr'
+        ? ['que fait', 'quelle est son action', 'que décide', 'qu\'est-ce qu\'il fait']
+        : ['what does', 'what is their action', 'what will they do', 'what do they do'];
+
+    // If we're in combat, no roll was generated, and the DM is asking a question...
+    if (isOngoingCombat && !cleanText.includes('[[ROLL') && questionKeywords.some(kw => cleanText.toLowerCase().includes(kw))) {
+        console.log("DM is asking for input instead of taking NPC action. Triggering self-correction pass...");
+        const correctionReminder = session.language === 'fr'
+            ? "[SYSTEME: RAPPEL: Vous NE DEVEZ PAS demander au joueur ce que font les compagnons ou ennemis. Vous DEVEZ décider pour eux, narrer l'action et sortir un [[ROLL]] maintenant. RE-GENEREZ votre réponse.]"
+            : "[SYSTEM: REMINDER: You MUST NOT ask the player what companions or enemies do. You MUST decide for them, narrate the action, and output a [[ROLL]] command now. RE-GENERATE your response.]";
+
+        const correctionContext = [...context, { role: 'assistant', content: responseText }, { role: 'system', content: correctionReminder }];
+        const correctedResponse = await generateResponse(correctionContext, session.model);
+
+        // Use the corrected response instead
+        const freshCleaned = cleanLLMResponse(correctedResponse);
+        cleanText = freshCleaned;
+
+        // Re-check for roll in the corrected text
+        const freshRoll = cleanText.match(/\[\[ROLL:\s*(.*?)\]\]/i);
+        if (freshRoll) {
+            cleanText = cleanText.substring(0, freshRoll.index + freshRoll[0].length);
+        }
     }
 
     // 1. Check for COORDINATES command (simpler format)
@@ -650,8 +676,9 @@ function cleanLLMResponse(text) {
         /<start_of_turn>/i,
         /<end_of_turn>/i,
         /<end_of_start_of_turn>/i,
-        /<end_of_start>/i,
+        /<end_of_start\s*>/i,
         /<\|end_of_text\|>/i,
+        /<\|eot_id\|>/i,
         /User:/i,
         /Player:/i,
         /Human:/i,
@@ -661,7 +688,7 @@ function cleanLLMResponse(text) {
 
     let cleaned = text;
 
-    // Find the earliest occurrence of any terminal token
+    // 1. Find the earliest occurrence of any terminal token
     let earliestIndex = cleaned.length;
     for (const token of terminalTokens) {
         const match = cleaned.match(token);
@@ -673,17 +700,23 @@ function cleanLLMResponse(text) {
     // Truncate at the earliest token found
     cleaned = cleaned.substring(0, earliestIndex).trim();
 
-    // Remove remaining Llama 3 header tokens or other specific markers that might be embedded
-    cleaned = cleaned.replace(/<\|start_header_id\|>assistant<\|end_header_id\|>/gi, '');
-    cleaned = cleaned.replace(/<\|start_header_id\|>|<\|end_header_id\|>|<\|reserved_special_token_\d+\|>/gi, '');
+    // 2. Comprehensive scrubbing pass for any fragments left behind
+    const scrubPatterns = [
+        /<\|start_header_id\|>assistant<\|end_header_id\|>/gi,
+        /<\|start_header_id\|>|<\|end_header_id\|>|<\|reserved_special_token_\d+\|>/gi,
+        /<end_of_start\s*>/gi,
+        /<end_of_turn\s*>/gi,
+        /<start_of_turn\s*>/gi,
+        /<\|eot_id\|>/gi,
+        /<\|eeo_id\|>/gi,
+        /User:/gi,
+        /Player:/gi,
+        /Human:/gi
+    ];
 
-    // Final pass for any trailing special tokens that might have escaped the substring
-    cleaned = cleaned.replace(/<end_of_start>/gi, '');
-    cleaned = cleaned.replace(/<end_of_turn>/gi, '');
-    cleaned = cleaned.replace(/<start_of_turn>/gi, '');
-    cleaned = cleaned.replace(/User:/gi, '');
-    cleaned = cleaned.replace(/Player:/gi, '');
-    cleaned = cleaned.replace(/Human:/gi, '');
+    scrubPatterns.forEach(pattern => {
+        cleaned = cleaned.replace(pattern, '');
+    });
 
     return cleaned.trim();
 }
