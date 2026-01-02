@@ -33,6 +33,25 @@ async function generateResponse(messages, modelName = null) {
         const response = await ollama.chat({
             model: model,
             messages: messages,
+            options: {
+                stop: [
+                    "<start_of_turn>",
+                    "<end_of_turn>",
+                    "<end_of_start>",
+                    "<|end_of_text|>",
+                    "<|eot_id|>",
+                    "User:",
+                    "Player:",
+                    "Human:",
+                    "Système :",
+                    "System:",
+                    "Système:",
+                    "System:",
+                    "<|start_header_id|>",
+                    "<|end_header_id|>",
+                    "<|reserved_special_token_"
+                ]
+            }
         });
         return response.message.content;
     } catch (error) {

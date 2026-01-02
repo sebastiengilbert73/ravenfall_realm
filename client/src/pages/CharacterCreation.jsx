@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 
 const TRANSLATIONS = {
@@ -82,11 +82,50 @@ const TRANSLATIONS = {
     }
 };
 
+const CLASS_SPELLS = {
+    en: {
+        Wizard: [
+            { name: "Fire Bolt", cost: "Cantrip", effect: "1d10 Fire Dmg", prob: "+5 Hit" },
+            { name: "Magic Missile", cost: "1 Slot", effect: "3x(1d4+1) Force", prob: "Auto" },
+            { name: "Shield", cost: "1 Slot", effect: "+5 AC Reaction", prob: "Self" }
+        ],
+        Cleric: [
+            { name: "Sacred Flame", cost: "Cantrip", effect: "1d8 Radiant", prob: "DC 13 DEX" },
+            { name: "Cure Wounds", cost: "1 Slot", effect: "1d8+3 Heal", prob: "Touch" },
+            { name: "Guiding Bolt", cost: "1 Slot", effect: "4d6 Radiant", prob: "+5 Hit" }
+        ],
+        Paladin: [
+            { name: "Lay on Hands", cost: "Pool", effect: "Heal HP", prob: "Touch" },
+            { name: "Divine Smite", cost: "1 Slot", effect: "+2d8 Radiant", prob: "On Hit" }
+        ],
+        Fighter: [],
+        Rogue: []
+    },
+    fr: {
+        Wizard: [
+            { name: "Trait de Feu", cost: "Cantrip", effect: "1d10 Feu", prob: "+5 Touché" },
+            { name: "Projectile Magique", cost: "1 Emplac.", effect: "3x(1d4+1) Force", prob: "Auto" },
+            { name: "Bouclier", cost: "1 Emplac.", effect: "+5 CA Réaction", prob: "Soi" }
+        ],
+        Cleric: [
+            { name: "Flamme Sacrée", cost: "Cantrip", effect: "1d8 Radiant", prob: "DD 13 DEX" },
+            { name: "Soins", cost: "1 Emplac.", effect: "1d8+3 Soin", prob: "Contact" },
+            { name: "Éclat Guidant", cost: "1 Emplac.", effect: "4d6 Radiant", prob: "+5 Touché" }
+        ],
+        Paladin: [
+            { name: "Imposition des mains", cost: "Réserve", effect: "Soin PV", prob: "Contact" },
+            { name: "Châtiment Divin", cost: "1 Emplac.", effect: "+2d8 Radiant", prob: "Au Touché" }
+        ],
+        Fighter: [],
+        Rogue: []
+    }
+};
+
 function CharacterCreation() {
     const navigate = useNavigate();
     const location = useLocation();
     const selectedModel = location.state?.model;
-    const language = location.state?.language || 'en'; // Default to en if missing
+    const language = location.state?.language || 'en';
 
     const text = TRANSLATIONS[language] || TRANSLATIONS.en;
 
@@ -96,8 +135,18 @@ function CharacterCreation() {
         gender: 'Male',
         race: 'Human',
         class: 'Fighter',
-        stats: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 }
+        stats: { str: 10, dex: 10, con: 10, int: 10, wis: 10, cha: 10 },
+        spells: []
     });
+
+    // Update spells when class changes
+    useEffect(() => {
+        const spellSet = CLASS_SPELLS[language] || CLASS_SPELLS.en;
+        setFormData(prev => ({
+            ...prev,
+            spells: spellSet[prev.class] || []
+        }));
+    }, [formData.class, language]);
 
     const handleChange = (e) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -105,12 +154,12 @@ function CharacterCreation() {
 
     const generateStats = () => {
         const roll = () => Math.floor(Math.random() * 6) + Math.floor(Math.random() * 6) + Math.floor(Math.random() * 6) + 3;
-        setFormData({
-            ...formData,
+        setFormData(prev => ({
+            ...prev,
             stats: {
                 str: roll(), dex: roll(), con: roll(), int: roll(), wis: roll(), cha: roll()
             }
-        });
+        }));
     };
 
     const handleSubmit = async (e) => {
@@ -119,13 +168,47 @@ function CharacterCreation() {
 
         setIsEmbarking(true);
         try {
+            // Calculate Modifiers
+            const getMod = (score) => Math.floor((score - 10) / 2);
+            const conMod = getMod(formData.stats.con);
+
+            // Base HP by Class (Level 1)
+            const hitDie = {
+                Fighter: 10, Paladin: 10,
+                Cleric: 8, Rogue: 8,
+                Wizard: 6
+            };
+            const baseHp = (hitDie[formData.class] || 8) + conMod;
+            const finalHp = Math.max(1, baseHp); // Minimum 1 HP
+
+            // Base MP (Simplified for "Mana Points" request)
+            // Casters get reasonable starting pool, others 0
+            const msgMpValues = {
+                Wizard: 10, Cleric: 8, Paladin: 4,
+                Fighter: 0, Rogue: 0
+            };
+            const baseMp = msgMpValues[formData.class] || 0;
+
+            // Ensure spells are attached 
+            const spellSet = CLASS_SPELLS[language] || CLASS_SPELLS.en;
+            const finalSpells = spellSet[formData.class] || [];
+
+            const characterPayload = {
+                ...formData,
+                hp: finalHp,
+                maxHp: finalHp,
+                mp: baseMp,
+                maxMp: baseMp,
+                spells: finalSpells
+            };
+
             const response = await fetch('http://localhost:3000/api/start', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    character: formData,
+                    character: characterPayload,
                     model: selectedModel,
-                    language: language // Pass language preference
+                    language: language
                 })
             });
             const data = await response.json();

@@ -71,7 +71,10 @@ function Landing() {
             ) : models.length > 0 ? (
                 <div className="config-panel">
                     <div className="model-selector">
-                        <label htmlFor="model-select">Dungeon Master:</label>
+                        <label htmlFor="model-select">
+                            Dungeon Master
+                            <span className="recommendation"> (recommended: gemma3:27b-it-qat)</span>:
+                        </label>
                         <select
                             id="model-select"
                             value={selectedModel}
