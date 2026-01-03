@@ -231,8 +231,8 @@ async function processTurn(session) {
 
     // --- SELF-CORRECTION: Forbid asking for player input during NPC/Companion turns ---
     const questionKeywords = session.language === 'fr'
-        ? ['que fait', 'quelle est son action', 'que décide', 'qu\'est-ce qu\'il fait']
-        : ['what does', 'what is their action', 'what will they do', 'what do they do'];
+        ? ['que fait', 'quelle est son action', 'que décide', 'qu\'est-ce qu\'il fait', 'que font-ils', 'quelle est leur action', 'que font-elles', 'qu\'allez-vous faire', 'que décidez-vous']
+        : ['what does', 'what is their action', 'what will they do', 'what do they do', 'what do you do', 'what is your action', 'how do they', 'what are they doing'];
 
     // If we're in combat, no roll was generated, and the DM is asking a question...
     if (isOngoingCombat && !cleanText.includes('[[ROLL') && questionKeywords.some(kw => cleanText.toLowerCase().includes(kw))) {
@@ -679,11 +679,13 @@ function cleanLLMResponse(text) {
         /<end_of_start\s*>/i,
         /<\|end_of_text\|>/i,
         /<\|eot_id\|>/i,
+        /<\|start_header_id\|>/i,
         /User:/i,
         /Player:/i,
         /Human:/i,
         /\nSystem\s*:/i,
-        /\nSystème\s*:/i
+        /\nSystème\s*:/i,
+        /\nAssistant\s*:/i
     ];
 
     let cleaned = text;
@@ -702,13 +704,17 @@ function cleanLLMResponse(text) {
 
     // 2. Comprehensive scrubbing pass for any fragments left behind
     const scrubPatterns = [
+        /<\|begin_of_text\|>/gi,
         /<\|start_header_id\|>assistant<\|end_header_id\|>/gi,
+        /<\|start_header_id\|>system<\|end_header_id\|>/gi,
+        /<\|start_header_id\|>user<\|end_header_id\|>/gi,
         /<\|start_header_id\|>|<\|end_header_id\|>|<\|reserved_special_token_\d+\|>/gi,
         /<end_of_start\s*>/gi,
         /<end_of_turn\s*>/gi,
         /<start_of_turn\s*>/gi,
         /<\|eot_id\|>/gi,
         /<\|eeo_id\|>/gi,
+        /<\|end_of_text\|>/gi,
         /User:/gi,
         /Player:/gi,
         /Human:/gi
