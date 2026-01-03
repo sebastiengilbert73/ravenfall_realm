@@ -1,0 +1,161 @@
+# D&D 5E BASIC RULES (2014)
+
+This document contains the core rules of Dungeons & Dragons 5th Edition (2014) for use by an AI Dungeon Master (DM).
+
+## THE CORE RULE
+1. Roll a d20.
+2. Add any relevant modifiers (Ability Modifier, Proficiency Bonus).
+3. Compare the total to a target number (Difficulty Class/DC or Armor Class/AC).
+If the total equals or exceeds the target, the roll is a success.
+
+---
+
+## CHAPTER 1: STEP-BY-STEP CHARACTERS
+
+### 1. Choose a Race
+- **Racial Traits**: Natural talents, special senses (like Darkvision), and proficiencies.
+- **Ability Score Increase**: Most races increase one or more ability scores.
+- **Languages & Speed**: Note your starting languages and base walking speed.
+
+### 2. Choose a Class
+- **Class Features**: Abilities that set your class apart (e.g., Spellcasting, Sneak Attack).
+- **Proficiencies**: Armor, weapons, skills, and saving throws gained from your class.
+- **Hit Points**: Determined by your class's Hit Die and your Constitution modifier.
+
+### 3. Determine Ability Scores
+- **Generation**: Roll 4d6 and record the total of the highest three. Do this 6 times.
+- **Standard Array**: Alternatively, use 15, 14, 13, 12, 10, 8.
+- **Modifiers**: (Ability Score - 10) / 2, rounded down.
+
+### 4. Describe Your Character
+- **Details**: Name, physical appearance, and personality.
+- **Alignment**: Moral and ethical outlook (e.g., Lawful Good, Chaotic Neutral).
+- **Background**: Your character’s origin. Grants a feature and proficiency in two skills.
+- **Personal Characteristics**: Ideals (beliefs), Bonds (connections), and Flaws (weaknesses).
+
+### 5. Choose Equipment
+- **Starting Gear**: Provided by your class and background.
+- **Carrying Capacity**: Your Strength score multiplied by 15 is the weight (in pounds) you can carry.
+
+### 6. Come Together
+- Heroic characters work together in a **Party**.
+
+---
+
+## CHAPTER 7: USING ABILITY SCORES
+
+### Six Abilities
+- **Strength**: Physical power, athletic training. (Skills: Athletics)
+- **Dexterity**: Agility, reflexes, balance. (Skills: Acrobatics, Sleight of Hand, Stealth)
+- **Constitution**: Endurance, health, vital force. (No skills)
+- **Intelligence**: Reasoning, memory, logic. (Skills: Arcana, History, Investigation, Nature, Religion)
+- **Wisdom**: Perception, insight, intuition. (Skills: Animal Handling, Insight, Medicine, Perception, Survival)
+- **Charisma**: Force of personality, persuasion. (Skills: Deception, Intimidation, Performance, Persuasion)
+
+### Ability Modifiers
+Score | Modifier
+--- | ---
+1 | -5
+2–3 | -4
+4–5 | -3
+6–7 | -2
+8–9 | -1
+10–11 | +0
+12–13 | +1
+14–15 | +2
+16–17 | +3
+18–19 | +4
+20 | +5
+
+### Advantage and Disadvantage
+- **Advantage**: Roll two d20s and use the higher result.
+- **Disadvantage**: Roll two d20s and use the lower result.
+- If both apply, they cancel out (roll normally). Multiple instances of advantage or disadvantage do not stack.
+
+### Proficiency Bonus
+Added to:
+- Attack rolls with weapons you are proficient with.
+- Ability checks with skills or tools you are proficient with.
+- Saving throws you are proficient with.
+- Saving throw DCs for spells you cast.
+
+---
+
+## CHAPTER 8: ADVENTURING
+
+### Time
+- **Round**: 6 seconds (used in combat).
+- **Short Rest**: At least 1 hour. Allows spending Hit Dice to heal.
+- **Long Rest**: At least 8 hours. Restores all HP and half of max Hit Dice.
+
+### Movement
+- **Speed**: The distance (in feet) a creature can move in one round.
+- **Difficult Terrain**: Every foot of movement costs 1 extra foot.
+
+### Social Interaction
+- NPC attitudes can be **Friendly**, **Indifferent**, or **Hostile**.
+- Use Charisma checks (Persuasion, Deception, Intimidation) to influence NPCs.
+
+---
+
+## CHAPTER 9: COMBAT
+
+### Order of Combat
+1. **Determine Surprise**: Stealth checks vs. Passive Perception.
+2. **Establish Positions**.
+3. **Roll Initiative**: Dexterity check.
+4. **Take Turns**: In initiative order.
+5. **Begin Next Round**.
+
+### Actions in Combat
+- **Attack**: Melee or Ranged.
+- **Cast a Spell**: Casting time determines if it's an action, bonus action, or reaction.
+- **Dash**: Double your movement speed for the turn.
+- **Disengage**: Your movement doesn't provoke opportunity attacks.
+- **Dodge**: Attacks against you have disadvantage; DEX saves have advantage.
+- **Help**: Give an ally advantage on their next check or attack.
+- **Hide**: Dexterity (Stealth) check.
+- **Ready**: Prepare an action to be triggered by a specific event.
+- **Search**: Wisdom (Perception) or Intelligence (Investigation) check.
+- **Use an Object**: Interact with a second object (first is free).
+
+### Damage and Healing
+- **Attack Roll**: 1d20 + Ability Mod + Proficiency Bonus vs. Target AC.
+- **Critical Hit**: Roll a 20 on the d20. Roll all of the attack’s damage dice twice.
+- **Death Saving Throws**: At 0 HP, roll a d20 (no modifiers). 10+ is a success. 3 successes = stable; 3 failures = dead. Rolling a 1 counts as 2 failures. Rolling a 20 restores 1 HP.
+
+---
+
+## CHAPTER 10: SPELLCASTING
+
+### Spell Slots
+- Casting a spell expends a slot of the spell's level or higher.
+- Cantrips are 0-level spells that do not use slots.
+
+### Components
+- **V** (Verbal): Spoken words.
+- **S** (Somatic): Hand gestures.
+- **M** (Material): Physical objects or a focus.
+
+### Duration
+- **Instantaneous**: Effect happens and ends immediately.
+- **Concentration**: Lasts until broken or duration ends. Taking damage requires a Constitution save (DC 10 or half damage taken) to maintain concentration.
+
+---
+
+## APPENDIX: CONDITIONS
+
+- **Blinded**: Cannot see. Fails sight checks. Attackers have advantage; its attacks have disadvantage.
+- **Charmed**: Cannot attack the charmer. Charmer has advantage on social checks.
+- **Deafened**: Cannot hear. Fails hearing checks.
+- **Frightened**: Disadvantage on checks/attacks while source is in sight. Cannot move closer to source.
+- **Grappled**: Speed becomes 0. Ends if grappler is incapacitated.
+- **Incapacitated**: Cannot take actions or reactions.
+- **Invisible**: Impossible to see. Heavily obscured. Attackers have disadvantage; its attacks have advantage.
+- **Paralyzed**: Incapacitated. Cannot move/speak. Fails STR/DEX saves. Attacks against it have advantage and are crits if within 5ft.
+- **Petrified**: Incapacitated. Transformed to stone. Fails STR/DEX saves. Resistance to all damage. Immune to poison/disease.
+- **Poisoned**: Disadvantage on attacks and ability checks.
+- **Prone**: Movement is crawling. Disadvantage on attacks. Attackers within 5ft have advantage; others have disadvantage.
+- **Restrained**: Speed 0. Attackers have advantage; its attacks have disadvantage. Disadvantage on DEX saves.
+- **Stunned**: Incapacitated. Cannot move. Speaks falteringly. Fails STR/DEX saves. Attackers have advantage.
+- **Unconscious**: Incapacitated. Drops items. Prone. Fails STR/DEX saves. Attackers have advantage and crits if within 5ft.
