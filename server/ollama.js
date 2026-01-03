@@ -47,9 +47,16 @@ async function generateResponse(messages, modelName = null) {
                     "System:",
                     "Système:",
                     "System:",
+                    "Système:",
+                    "System:",
                     "<|start_header_id|>",
                     "<|end_header_id|>",
-                    "<|reserved_special_token_"
+                    "<|reserved_special_token_",
+                    "<|begin_of_text|>",
+                    "Assistant:",
+                    "Assistant :",
+                    "Dungeon Master:",
+                    "Maître du Donjon:"
                 ]
             }
         });
