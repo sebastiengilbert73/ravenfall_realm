@@ -13,6 +13,7 @@ const TRANSLATIONS = {
         stats: "Stats",
         hp: "HP",
         mp: "MP",
+        ac: "AC",
         spells: "Spells & Abilities",
         spellName: "Spell",
         cost: "Cost",
@@ -66,6 +67,7 @@ const TRANSLATIONS = {
         stats: "Statistiques",
         hp: "PV",
         mp: "PM",
+        ac: "CA",
         spells: "Sorts et Aptitudes",
         spellName: "Sort",
         cost: "Coût",
@@ -513,6 +515,7 @@ function GameSession() {
                             </div>
                             <p><strong>{text.race}:</strong> {text.races[char.race] || char.race}</p>
                             <p><strong>{text.class}:</strong> {text.classes[char.class] || char.class}</p>
+                            <p><strong>{text.ac}:</strong> {char.ac || 10}</p>
 
                             {/* Resource Bars */}
                             {(char.hp !== undefined) && (

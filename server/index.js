@@ -21,6 +21,92 @@ app.use(bodyParser.json());
 // Key: sessionId, Value: { character: {}, history: [], model: string, language: string }
 const sessions = {};
 
+// Cache for D&D rules
+let rulesDb = null;
+
+function loadRules() {
+    try {
+        const rulesPath = path.join(__dirname, '..', 'dnd_basic_rules.txt');
+        const content = fs.readFileSync(rulesPath, 'utf8');
+
+        const sections = {};
+        const parts = content.split(/---/);
+
+        parts.forEach(part => {
+            const lines = part.trim().split('\n');
+            const titleLine = lines.find(line => line.startsWith('##'));
+            if (titleLine) {
+                // Extract "CHAPTER X" or "APPENDIX" as key
+                const match = titleLine.match(/## (CHAPTER \d+|APPENDIX):/i);
+                if (match) {
+                    const key = match[1].toUpperCase();
+                    sections[key] = part.trim();
+                } else if (titleLine.includes('CORE RULE')) {
+                    sections['CORE'] = part.trim();
+                }
+            }
+        });
+
+        rulesDb = sections;
+        console.log("D&D Rules loaded into memory.");
+    } catch (err) {
+        console.error("Failed to load D&D rules:", err);
+        rulesDb = {};
+    }
+}
+
+// Initialize rules
+loadRules();
+
+function getRulesForContext(session) {
+    if (!rulesDb) return "";
+
+    let relevantRules = [];
+
+    // Always include Core Rules
+    if (rulesDb['CORE']) relevantRules.push(rulesDb['CORE']);
+
+    const recentHistory = (session.history || []).slice(-3).map(h => h.content.toLowerCase()).join(' ');
+    const isNewGame = session.history.length <= 1;
+
+    // 1. Character Creation (Chapter 1)
+    if (isNewGame || recentHistory.includes('character') || recentHistory.includes('personnage') || recentHistory.includes('créer')) {
+        if (rulesDb['CHAPTER 1']) relevantRules.push(rulesDb['CHAPTER 1']);
+    }
+
+    // 2. Ability Scores & Checks (Chapter 7)
+    if (recentHistory.includes('check') || recentHistory.includes('test') || recentHistory.includes('save') || recentHistory.includes('sauvegarde')) {
+        if (rulesDb['CHAPTER 7']) relevantRules.push(rulesDb['CHAPTER 7']);
+    }
+
+    // 3. Adventuring/Movement (Chapter 8)
+    if (recentHistory.includes('move') || recentHistory.includes('travel') || recentHistory.includes('déplacer') || recentHistory.includes('voyager')) {
+        if (rulesDb['CHAPTER 8']) relevantRules.push(rulesDb['CHAPTER 8']);
+    }
+
+    // 4. Combat (Chapter 9)
+    const combatKeywords = session.language === 'fr' ? ['combat', 'initiative', 'tour suivant', 'ordre de tour'] : ['combat', 'initiative', 'next turn', 'turn order', 'round'];
+    const isCombat = combatKeywords.some(kw => recentHistory.includes(kw)) || recentHistory.includes('roll_group');
+    if (isCombat) {
+        if (rulesDb['CHAPTER 9']) relevantRules.push(rulesDb['CHAPTER 9']);
+    }
+
+    // 5. Spellcasting (Chapter 10)
+    if (recentHistory.includes('spell') || recentHistory.includes('cast') || recentHistory.includes('sort') || recentHistory.includes('incante')) {
+        if (rulesDb['CHAPTER 10']) relevantRules.push(rulesDb['CHAPTER 10']);
+    }
+
+    // 6. Conditions (Appendix)
+    const conditions = ['blinded', 'charmed', 'deafened', 'frightened', 'grappled', 'incapacitated', 'invisible', 'paralyzed', 'petrified', 'poisoned', 'prone', 'restrained', 'stunned', 'unconscious'];
+    if (conditions.some(c => recentHistory.includes(c))) {
+        if (rulesDb['APPENDIX']) relevantRules.push(rulesDb['APPENDIX']);
+    }
+
+    if (relevantRules.length === 0) return "";
+
+    return "\n\n### RELEVANT D&D RULES FOR THIS CONTEXT:\n" + relevantRules.join("\n\n---\n\n");
+}
+
 const SYSTEM_PROMPT_EN = `You are the Dungeon Master (DM) for a Dungeons and Dragons game. 
 You will describe the world, non-player characters (NPCs), and events. 
 The player will tell you their actions.
@@ -30,6 +116,7 @@ You must NOT ask the player to roll dice. You must determine when a roll is need
 To perform a roll, you MUST include a special command in your response: \`[[ROLL: XdY+Z]]\`
 - Example: \`[[ROLL: 1d20+3]]\` or \`[[ROLL: 2d6]]\`
 - **CRITICAL**: Output ONLY ONE [[ROLL]] command per response. STOP immediately after the command.
+- **NEVER NARRATE THE RESULT**: Do NOT guess or write the result of a roll (e.g., "You take 5 damage"). You must wait for the system to provide the result in the next turn.
 - The system will roll the dice and provide the result on the next instruction.
 - Use the provided result to narrate the outcome.
 
@@ -47,9 +134,9 @@ To perform a roll, you MUST include a special command in your response: \`[[ROLL
    - **INITIATIVE ORDER**: You MUST follow initiative order strictly. Play out ALL turns in descending order before giving control back to the player.
    - **COMBAT START**: When combat begins, you MUST output \`[[ROLL_GROUP: Player=1d20+DEX_MOD, Enemy1=1d20+Mod, ...]]\` for initiative of ALL participants. DO NOT narrate attack rolls in text; use the system command. STOP immediately after the command.
    - **COMBAT TRANSITION**: If your narration leads to an encounter, you MUST end the message with the initiative [[ROLL_GROUP]] command. Do NOT ask the player "What do you do?" if it's time for initiative.
-6. **HP/MP UPDATES**:
-   - If player takes damage or uses mana, output: \`[[UPDATE_STATS: { "hp": -damage, "mp": -cost }]]\`
-   - Use negative numbers for loss, positive for healing.
+6. **STATS UPDATES (HP/MP/AC)**:
+   - If player takes damage, uses mana, or their AC changes, output: \`[[UPDATE_STATS: { "hp": -5, "mp": -1, "ac": 15 }]]\`
+   - Use negative numbers for loss, positive for healing (HP/MP). For **AC**, use the **FINAL** value.
 
 7. **POSITION TRACKING - CRITICAL - NEVER FORGET THIS**:
    - EVERY SINGLE RESPONSE MUST END WITH: \`[[coordinates[x: X, y: Y]]]\`
@@ -69,6 +156,7 @@ Vous NE devez PAS demander au joueur de lancer les dés. Vous devez déterminer 
 Pour effectuer un jet, vous DEVEZ inclure une commande spéciale dans votre réponse : \`[[ROLL: XdY+Z]]\`
 - Exemple : \`[[ROLL: 1d20+3]]\` ou \`[[ROLL: 2d6]]\`
 - **CRITIQUE**: Sortez UN SEUL [[ROLL]] par réponse. ARRÊTEZ-VOUS immédiatement après la commande.
+- **NE NARREZ JAMAIS LE RÉSULTAT**: Ne devinez PAS et n'écrivez PAS le résultat d'un dé (ex: "Vous perdez 5 PV"). Vous devez attendre que le système fournisse le résultat au tour suivant.
 - Le système lancera les dés et vous fournira le résultat lors de la prochaine instruction.
 - Utilisez le résultat fourni pour narrer la suite.
 
@@ -87,9 +175,9 @@ Pour effectuer un jet, vous DEVEZ inclure une commande spéciale dans votre rép
    - **ORDRE D'INITIATIVE**: Vous DEVEZ suivre l'ordre d'initiative strictement. Jouez TOUS les tours dans l'ordre décroissant avant de redonner la main au joueur.
    - **DÉBUT DE COMBAT**: Quand un combat commence, vous DEVEZ sortir \`[[ROLL_GROUP: Joueur=1d20+DEX_MOD, Ennemi1=1d20+Mod, ...]]\` pour l'initiative de TOUS les participants. NE décrivez PAS les jets d'initiative dans le texte ; utilisez la commande système. ARRÊTEZ-VOUS immédiatement après la commande.
    - **TRANSITION DE COMBAT**: Si votre narration mène à une rencontre, vous DEVEZ terminer le message par la commande d'initiative [[ROLL_GROUP]]. Ne demandez PAS au joueur "Que faites-vous ?" s'il est temps de lancer l'initiative.
-7. **CHANGEMENTS D'ÉTAT (PV/PM)**:
-   - Si le joueur perd des PV (dégâts) ou des PM (sorts), utilisez: \`[[UPDATE_STATS: { "hp": -5, "mp": -1 }]]\`
-   - Utilisez des valeurs négatives pour les dégâts/coûts, positives pour soins/récupération.
+7. **CHANGEMENTS D'ÉTAT (PV/PM/CA)**:
+   - Si le joueur perd des PV, des PM, ou si sa CA change, utilisez: \`[[UPDATE_STATS: { "hp": -5, "mp": -1, "ac": 15 }]]\`
+   - Utilisez des valeurs négatives pour les dégâts/coûts, positives pour soins/récupération. Pour la **CA**, donnez la valeur **FINALE**.
 
 8. **SUIVI DE POSITION - CRITIQUE - N'OUBLIEZ JAMAIS CECI**:
    - CHAQUE RÉPONSE DOIT SE TERMINER PAR: \`[[coordinates[x: X, y: Y]]]\`
@@ -144,11 +232,50 @@ function updateMapData(session, mapUpdate) {
     }
 }
 
+// Helper: Get current character stats block for the prompt context
+function getCharacterStatsBlock(character, language) {
+    if (!character) return "";
+    const stats = character.stats || {};
+    const statsLabels = language === 'fr'
+        ? { str: "FOR", dex: "DEX", con: "CON", int: "INT", wis: "SAG", cha: "CHA" }
+        : { str: "STR", dex: "DEX", con: "CON", int: "INT", wis: "WIS", cha: "CHA" };
+
+    const hpLabel = language === 'fr' ? "PV" : "HP";
+    const mpLabel = language === 'fr' ? "PM" : "MP";
+    const acLabel = language === 'fr' ? "CA" : "AC";
+
+    return `
+### CURRENT CHARACTER STATE (GROUND TRUTH):
+- Name: ${character.name}
+- Level: ${character.level || 1}
+- Class: ${character.class}
+- **${hpLabel}: ${character.hp}/${character.maxHp}**
+- **${mpLabel}: ${character.mp}/${character.maxMp}**
+- **${acLabel}: ${character.ac || 10}**
+- Stats: ${Object.entries(statsLabels).map(([key, label]) => `${label}: ${stats[key]}`).join(', ')}
+`.trim();
+}
+
 // Logic to process one turn of generation
 async function processTurn(session) {
     console.log(`Generating response for session ${session.id}...`);
 
     let context = [...session.history];
+
+    // Inject relevant D&D rules based on context
+    const dynamicRules = getRulesForContext(session);
+    if (dynamicRules) {
+        context.push({ role: 'system', content: dynamicRules });
+        console.log("Injected dynamic rules into prompt.");
+    }
+
+    // Inject CURRENT Character Stats to ensure DM is in sync
+    const statsBlock = getCharacterStatsBlock(session.character, session.language);
+    if (statsBlock) {
+        context.push({ role: 'system', content: statsBlock });
+        console.log("Injected current stats into prompt.");
+    }
+
     const lastMsg = context[context.length - 1];
 
     // If we are continuing from a System Roll message, strictly forbid playing the user's turn
@@ -231,15 +358,23 @@ async function processTurn(session) {
 
     // --- SELF-CORRECTION: Forbid asking for player input during NPC/Companion turns ---
     const questionKeywords = session.language === 'fr'
-        ? ['que fait', 'quelle est son action', 'que décide', 'qu\'est-ce qu\'il fait', 'que font-ils', 'quelle est leur action', 'que font-elles', 'qu\'allez-vous faire', 'que décidez-vous']
-        : ['what does', 'what is their action', 'what will they do', 'what do they do', 'what do you do', 'what is your action', 'how do they', 'what are they doing'];
+        ? ['que fait', 'quelle est son action', 'que décide', 'qu\'est-ce qu\'il fait', 'que font-ils', 'quelle est leur action', 'que font-elles', 'qu\'allez-vous faire', 'que décidez-vous', 'faites-vous', 'fais-tu']
+        : ['what does', 'what is their action', 'what will they do', 'what do they do', 'what do you do', 'what is your action', 'how do they', 'what are they doing', 'what do you', 'what are you'];
 
-    // If we're in combat, no roll was generated, and the DM is asking a question...
-    if (isOngoingCombat && !cleanText.includes('[[ROLL') && questionKeywords.some(kw => cleanText.toLowerCase().includes(kw))) {
-        console.log("DM is asking for input instead of taking NPC action. Triggering self-correction pass...");
+    const hasQuestion = questionKeywords.some(kw => cleanText.toLowerCase().includes(kw));
+    const hasRoll = cleanText.includes('[[ROLL');
+
+    // Protocol Violation 1: DM combined a ROLL with a question (Violates "Roll & Stop" rule)
+    // Protocol Violation 2: DM is asking a question when it's an NPC turn (Skipping their action)
+    // NOTE: We allow questions IF there is no roll, as it might be the start of the player's turn.
+    // However, if we detect it's an NPC's turn via recent history and the DM is asking, we correct.
+    const isNpcTurnSkip = !hasRoll && hasQuestion && needsCombatReminder; // needsCombatReminder triggers on 'initiative', 'next turn', etc.
+
+    if (isOngoingCombat && (hasRoll && hasQuestion || isNpcTurnSkip)) {
+        console.log(`DM protocol violation detected (Question: ${hasQuestion}, Roll: ${hasRoll}, NPC Skip: ${isNpcTurnSkip}). Triggering self-correction pass...`);
         const correctionReminder = session.language === 'fr'
-            ? "[SYSTEME: RAPPEL: Vous NE DEVEZ PAS demander au joueur ce que font les compagnons ou ennemis. Vous DEVEZ décider pour eux, narrer l'action et sortir un [[ROLL]] maintenant. RE-GENEREZ votre réponse.]"
-            : "[SYSTEM: REMINDER: You MUST NOT ask the player what companions or enemies do. You MUST decide for them, narrate the action, and output a [[ROLL]] command now. RE-GENERATE your response.]";
+            ? "[SYSTEME: RAPPEL: Vous DEVEZ arrêter votre réponse immédiatement après un [[ROLL]]. Ne posez PAS de question au joueur dans le même message qu'un [[ROLL]]. Si c'est le tour d'un PNJ, vous DEVEZ décider pour lui et sortir un [[ROLL]] sans demander au joueur. RE-GENEREZ votre réponse.]"
+            : "[SYSTEM: REMINDER: You MUST stop your response immediately after a [[ROLL]]. Do NOT ask the player a question in the same message as a [[ROLL]]. If it is an NPC's turn, you MUST decide for them and output a [[ROLL]] without asking the player. RE-GENERATE your response.]";
 
         const correctionContext = [...context, { role: 'assistant', content: responseText }, { role: 'system', content: correctionReminder }];
         const correctedResponse = await generateResponse(correctionContext, session.model);
@@ -249,7 +384,7 @@ async function processTurn(session) {
         cleanText = freshCleaned;
 
         // Re-check for roll in the corrected text
-        const freshRoll = cleanText.match(/\[\[ROLL:\s*(.*?)\]\]/i);
+        const freshRoll = cleanText.match(/\[\[ROLL:\s*(.*?)\]\]/i) || cleanText.match(/\[\[ROLL_GROUP:\s*(.*?)\]\]/i);
         if (freshRoll) {
             cleanText = cleanText.substring(0, freshRoll.index + freshRoll[0].length);
         }
@@ -311,6 +446,7 @@ async function processTurn(session) {
             if (session.character) {
                 if (updates.hp !== undefined) session.character.hp = Math.max(0, Math.min(session.character.maxHp, session.character.hp + updates.hp));
                 if (updates.mp !== undefined) session.character.mp = Math.max(0, Math.min(session.character.maxMp, session.character.mp + updates.mp));
+                if (updates.ac !== undefined) session.character.ac = updates.ac;
             }
         } catch (e) {
             console.error("Failed to parse Stats Update:", e);
@@ -319,8 +455,19 @@ async function processTurn(session) {
 
     // 2.2 Backup Stat Extraction (Regex for "HP: 10/20" or "PV : 10/20")
     // Helpful if the LLM forgets the explicit command but writes it in the text.
-    // Matches: "PV : 10/20" or "HP: 10/30" or "Points de vie : 15 / 30"
     if (session.character) {
+        // AC Extraction
+        const acRegex = /(?:AC|CA|Armoure? Class|Classe d'armure)\s*[:\-]?\s*(\d+)/i;
+        const acMatch = fullTextForParsing.match(acRegex);
+        if (acMatch) {
+            const val = parseInt(acMatch[1]);
+            if (val > 0 && val < 40) {
+                console.log(`Fallback AC Update: ${val}`);
+                session.character.ac = val;
+            }
+        }
+
+        // HP Extraction (Matches: "PV : 10/20" or "HP: 10/30" or "Points de vie : 15 / 30")
         // Try X/Y format first (e.g., "PV 7/10")
         const hpRegexFull = /(?:HP|PV|Points de vie|Health)\s*[:\-]?\s*(\d+)\s*\/\s*(\d+)/i;
         const hpMatchFull = fullTextForParsing.match(hpRegexFull);
@@ -415,7 +562,7 @@ async function processTurn(session) {
         session.history.push({ role: 'assistant', content: narrativeForHistory });
         session.history.push({ role: 'system', content: groupMsg });
 
-        return { status: 'continue', message: cleanText, mapData: session.mapData };
+        return { status: 'continue', message: cleanText, mapData: session.mapData, character: session.character };
     } else if (rollMatch) {
         const expression = rollMatch[1];
         console.log(`DM requested roll: ${expression}`);
@@ -438,16 +585,16 @@ async function processTurn(session) {
             session.history.push({ role: 'system', content: systemMsg });
 
             // Return status continue, meaning client should call again
-            return { status: 'continue', message: cleanText, mapData: session.mapData };
+            return { status: 'continue', message: cleanText, mapData: session.mapData, character: session.character };
         } else {
             console.error("Failed to parse dice expression");
             session.history.push({ role: 'assistant', content: narrativeForHistory });
-            return { status: 'complete', message: cleanText, mapData: session.mapData };
+            return { status: 'complete', message: cleanText, mapData: session.mapData, character: session.character };
         }
     } else {
         // No roll, this is the final narrative
         session.history.push({ role: 'assistant', content: narrativeForHistory });
-        return { status: 'complete', message: cleanText, mapData: session.mapData };
+        return { status: 'complete', message: cleanText, mapData: session.mapData, character: session.character };
     }
 }
 
@@ -474,8 +621,20 @@ ${spellsList ? `Spells/Abilities: ${spellsList}.` : ''}
 ${lang === 'fr' ? "L'aventure commence. Décrivez la scène de départ. IMPORTANT : N'oubliez pas d'utiliser la commande [[UPDATE_MAP]] pour enregistrer l'endroit où se trouve le joueur (50, 50) comme 'visited'." : "The adventure begins. Describe the starting scene. IMPORTANT: Do not forget to use the [[UPDATE_MAP]] command to register the player's starting location (50, 50) as 'visited'."}`;
 
         const response = await generateResponse([{ role: 'system', content: initialPrompt }], model);
-        // Clean response
+        // Initial parse of the welcome message for map updates
         const cleanText = cleanLLMResponse(response);
+
+        // Ensure character has initial HP/MP/AC set in server state
+        if (character.maxHp && character.hp === undefined) character.hp = character.maxHp;
+        if (character.maxMp && character.mp === undefined) character.mp = character.maxMp;
+        if (!character.level) character.level = 1;
+        if (character.ac === undefined) {
+            // Calculate default AC: 10 + Dex mod
+            const dex = character.stats?.dex || 10;
+            const dexMod = Math.floor((dex - 10) / 2);
+            character.ac = 10 + dexMod;
+            console.log(`Initialized default AC: ${character.ac} (DEX: ${dex})`);
+        }
 
         sessions[sessionId] = {
             id: sessionId,
