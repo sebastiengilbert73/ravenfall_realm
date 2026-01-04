@@ -126,7 +126,8 @@ To perform a roll, you MUST include a special command in your response: \`[[ROLL
 3. Do not act for the player.
 4. **TECHNICAL JARGON BANNED**: NEVER use technical labels like "UPDATE_MAP", "ROLL", "DEX_MOD", "JET D'ATTAQUE", etc., in your narrative. Use only descriptive, story-driven language.
 5. If a combat occurs, manage the initiative and turns using the ROLL commands.
-6. **PLAYER ROLLS**:
+- **CRITICAL**: Use the **MODIFIERS** provided in the character sheet (e.g., DEX: 15 (+2)). Do NOT calculate them yourself.
+- **PLAYER ROLLS**:
    - If the player needs to make a check or save (e.g., DEX Save), YOU must generate the roll for them using \`[[ROLL: ...]]\`.
    - Use the player's stats provided below to calculate the modifier.
    - **INITIATIVE**: After resolving the player's action (and any resulting rolls), YOU must immediately play out the turns of any hostile NPCs or companions present.
@@ -167,7 +168,8 @@ Pour effectuer un jet, vous DEVEZ inclure une commande spéciale dans votre rép
 4. **JARGON TECHNIQUE INTERDIT**: N'utilisez JAMAIS de labels techniques comme "UPDATE_MAP", "ROLL", "DEX_MOD", "JET D'ATTAQUE", etc., dans votre narration. Utilisez un langage purement narratif.
 5. If a combat occurs, manage the initiative and turns using the ROLL commands.
 6. RÉPONDEZ TOUJOURS EN FRANÇAIS.
-7. **JETS DU JOUEUR**:
+- **CRITIQUE**: Utilisez les **MODIFICATEURS** fournis dans la fiche de personnage (ex: DEX: 15 (+2)). Ne les calculez PAS vous-même.
+- **JETS DU JOUEUR**:
    - Si le joueur doit faire un test ou une sauvegarde (ex: Sauvegarde de DEX), VOUS devez générer le lancer pour lui avec \`[[ROLL: ...]]\`.
    - Utilisez les stats du joueur fournies ci-dessous pour calculer le modificateur.
    - **INITIATIVE**: Après avoir résolu l'action du joueur (et les jets associés), VOUS devez immédiatement jouer le tour des PNJ hostiles ou des compagnons présents.
@@ -244,6 +246,13 @@ function getCharacterStatsBlock(character, language) {
     const mpLabel = language === 'fr' ? "PM" : "MP";
     const acLabel = language === 'fr' ? "CA" : "AC";
 
+    const statsEntries = Object.entries(statsLabels).map(([key, label]) => {
+        const score = stats[key] || 10;
+        const mod = Math.floor((score - 10) / 2);
+        const modStr = mod >= 0 ? `+${mod}` : `${mod}`;
+        return `${label}: ${score} (${modStr})`;
+    }).join(', ');
+
     return `
 ### CURRENT CHARACTER STATE (GROUND TRUTH):
 - Name: ${character.name}
@@ -252,7 +261,7 @@ function getCharacterStatsBlock(character, language) {
 - **${hpLabel}: ${character.hp}/${character.maxHp}**
 - **${mpLabel}: ${character.mp}/${character.maxMp}**
 - **${acLabel}: ${character.ac || 10}**
-- Stats: ${Object.entries(statsLabels).map(([key, label]) => `${label}: ${stats[key]}`).join(', ')}
+- Stats: ${statsEntries}
 `.trim();
 }
 
